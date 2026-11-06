@@ -50,6 +50,7 @@ public partial class ImageViewerWindow : Window
     private readonly ImageViewerViewModel _viewModel = new();
     private readonly MatrixTransform _previewTransform = new() { Matrix = Matrix.Identity };
     private bool _closeOnDeactivate;
+    private bool _closing;
 
     public ImageViewerWindow()
     {
@@ -109,7 +110,12 @@ public partial class ImageViewerWindow : Window
         Title = Localization.Strings.ImageViewerWindow_Title;
         KeyDown += OnKeyDown;
         Deactivated += OnDeactivated;
-        Closed += (_, _) => _viewModel.Dispose();
+        Closing += (_, _) => _closing = true;
+        Closed += (_, _) =>
+        {
+            _closing = true;
+            _viewModel.Dispose();
+        };
     }
 
     private async void OnOpened(object? sender, EventArgs e)
@@ -210,9 +216,16 @@ public partial class ImageViewerWindow : Window
 
     private void OnDeactivated(object? sender, EventArgs e)
     {
-        if (_closeOnDeactivate)
+        // Closing a window deactivates it, and Avalonia raises that second deactivation from
+        // HandleClosed, after the platform window is gone. Closing again from there reaches a
+        // disposed IAvnWindowProxy while the owner is cleared and aborts the process, so a window
+        // that is already closing is left alone.
+        if (_closing || !_closeOnDeactivate)
         {
-            Close();
+            return;
         }
+
+        _closing = true;
+        Close();
     }
 }
